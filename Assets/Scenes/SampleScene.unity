@@ -142,6 +142,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   input: {fileID: 2800000, guid: 6174d0eda1e345541805847ca34b20f3, type: 3}
+  drawOpenSet: 1
+  drawClosedSet: 1
+  drawPath: 1
+  drawParents: 1
+  tileSize: {x: 1, y: 1}
+  tileTransparency: 0.5
+  ignoreDiagonalCostIncrease: 0
+  disableStepByStep: 1
+  wallCost: 10000
+  emptyCost: 1
+  slowDownCost: 5
+  allowDiagonalMovement: 1
+  startColor: {r: 0, g: 0, b: 1, a: 1}
+  targetColor: {r: 1, g: 0, b: 0, a: 1}
+  pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  slowDownColor: {r: 0, g: 1, b: 1, a: 1}
+  wallColor: {r: 0, g: 0, b: 0, a: 1}
+  emptyColor: {r: 1, g: 1, b: 1, a: 1}
+  openSetColor: {r: 0.5, g: 0.5, b: 1, a: 1}
+  closedSetColor: {r: 0, g: 0, b: 0.5, a: 1}
 --- !u!4 &354234578
 Transform:
   m_ObjectHideFlags: 0

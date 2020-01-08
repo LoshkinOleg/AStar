@@ -1,45 +1,61 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEditor;
 
 public class Pathfinder : MonoBehaviour
 {
-    const float WALL_COST = 10000.0f;
-    const float EMPTY_COST = 1.0f;
-
     // Nested types.
     public class Map
     {
-        public Map(Texture2D input)
+        // Overloads.
+        public Node this[int x, int y]
+        {
+            get
+            {
+                return _VALUES[x, y];
+            }
+            set
+            {
+                _VALUES[x, y] = value;
+            }
+        }
+
+        // Constructors.
+        public Map(Texture2D input, float emptyCost, float wallCost, float slowDownCost, Color emptyColor, Color wallColor, Color slowDownColor, Color startColor, Color targetColor)
         {
             WIDTH = input.width;
             HEIGHT = input.height;
 
-            VALUES = new Node[WIDTH, HEIGHT];
+            _VALUES = new Node[WIDTH, HEIGHT];
 
+            // Fill out Node array.
             Color color;
             for (int x = 0; x < WIDTH; x++)
             {
                 for (int y = 0; y < HEIGHT; y++)
                 {
                     color = input.GetPixel(x,y);
-                    if (color == Color.white)
+                    if (color == emptyColor)
                     {
-                        VALUES[x, y] = new Node(EMPTY_COST, new Vector2Int(x,y));
+                        _VALUES[x, y] = new Node(emptyCost, new Vector2Int(x,y));
                     }
-                    else if (color == Color.black)
+                    else if (color == wallColor)
                     {
-                        VALUES[x, y] = new Node(WALL_COST, new Vector2Int(x, y));
+                        _VALUES[x, y] = new Node(wallCost, new Vector2Int(x, y));
                     }
-                    else if (color == Color.blue)
+                    else if (color == slowDownColor)
                     {
-                        VALUES[x, y] = new Node(EMPTY_COST, new Vector2Int(x, y));
-                        STARTING_NODE = VALUES[x, y];
+                        _VALUES[x, y] = new Node(slowDownCost, new Vector2Int(x, y));
                     }
-                    else if (color == Color.red)
+                    else if (color == startColor)
                     {
-                        VALUES[x, y] = new Node(EMPTY_COST, new Vector2Int(x, y));
-                        TARGET_NODE = VALUES[x, y];
+                        _VALUES[x, y] = new Node(emptyCost, new Vector2Int(x, y));
+                        STARTING_NODE = _VALUES[x, y];
+                    }
+                    else if (color == targetColor)
+                    {
+                        _VALUES[x, y] = new Node(emptyCost, new Vector2Int(x, y));
+                        TARGET_NODE = _VALUES[x, y];
                     }
                     else
                     {
@@ -48,83 +64,106 @@ public class Pathfinder : MonoBehaviour
                 }
             }
 
+            // Check for inconsistencies.
+            if (STARTING_NODE == null) Debug.LogError("Starting node is not set!");
+            if (TARGET_NODE == null) Debug.LogError("Target node is not set!");
+            if (STARTING_NODE == TARGET_NODE) Debug.LogError("Starting and target nodes are the same!");
+
+            // Calculate heuristics (h variable) for all nodes.
             for (int x = 0; x < WIDTH; x++)
             {
                 for (int y = 0; y < HEIGHT; y++)
                 {
-                    VALUES[x, y].h = Vector2Int.Distance(TARGET_NODE.POSITION, VALUES[x,y].POSITION);
-                    VALUES[x, y].g = VALUES[x,y].TRAVERSAL_COST; // + cumulated value added later by A*.
+                    _VALUES[x, y].h = Vector2Int.Distance(TARGET_NODE.POSITION, _VALUES[x,y].POSITION);
                 }
             }
-
-            Debug.Assert(STARTING_NODE != null && TARGET_NODE != null);
         }
-        public KeyValuePair<Node, bool>[] GetNeighborsOf(Node node)
-        {
-            List<KeyValuePair<Node, bool>> neighborPositions = new List<KeyValuePair<Node, bool>>();
 
+        // Public methods.
+        /// <summary>
+        /// Returns array of valid neighbors and boolean values to tell whether the neighbor was located diagonally from the input node or not.
+        /// </summary>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public Tuple<Node, bool>[] GetNeighborsOf(Node node, bool allowDiagonalMovement)
+        {
+            var neighborPositions = new List<Tuple<Node, bool>>();
+
+            // Fill return list with cardinal neighbors.
             if (node.POSITION.x - 1 >= 0)
             {
-                // L
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x - 1, node.POSITION.y], false));
+                // Left.
+                neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x - 1, node.POSITION.y], false));
             }
             if (node.POSITION.x + 1 <= WIDTH - 1)
             {
-                // R
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x + 1, node.POSITION.y], false));
+                // Right.
+                neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x + 1, node.POSITION.y], false));
             }
             if (node.POSITION.y - 1 >= 0)
             {
-                // T
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x, node.POSITION.y - 1], false));
+                // Top.
+                neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x, node.POSITION.y - 1], false));
             }
             if (node.POSITION.y + 1 <= HEIGHT - 1)
             {
-                // B
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x, node.POSITION.y + 1], false));
-            }
-            if (node.POSITION.x - 1 >= 0 && node.POSITION.y - 1 >= 0)
-            {
-                // TL
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x - 1, node.POSITION.y - 1], true));
-            }
-            if (node.POSITION.x + 1 <= WIDTH - 1 && node.POSITION.y + 1 <= HEIGHT - 1)
-            {
-                // BR
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x + 1, node.POSITION.y + 1], true));
-            }
-            if (node.POSITION.x - 1 >= 0 && node.POSITION.y + 1 <= HEIGHT - 1)
-            {
-                // BL
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x - 1, node.POSITION.y + 1], true));
-            }
-            if (node.POSITION.x + 1 <= WIDTH - 1 && node.POSITION.y - 1 >= 0)
-            {
-                // TR
-                neighborPositions.Add(new KeyValuePair<Node, bool>(VALUES[node.POSITION.x + 1, node.POSITION.y - 1], true));
+                // Bottom.
+                neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x, node.POSITION.y + 1], false));
             }
 
+            // Fill return list with diagonal neighbors if applicable.
+            if (allowDiagonalMovement)
+            {
+                if (node.POSITION.x - 1 >= 0 && node.POSITION.y - 1 >= 0)
+                {
+                    // Top-Left.
+                    neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x - 1, node.POSITION.y - 1], true));
+                }
+                if (node.POSITION.x + 1 <= WIDTH - 1 && node.POSITION.y + 1 <= HEIGHT - 1)
+                {
+                    // Bottom-Right.
+                    neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x + 1, node.POSITION.y + 1], true));
+                }
+                if (node.POSITION.x - 1 >= 0 && node.POSITION.y + 1 <= HEIGHT - 1)
+                {
+                    // BottomLeft.
+                    neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x - 1, node.POSITION.y + 1], true));
+                }
+                if (node.POSITION.x + 1 <= WIDTH - 1 && node.POSITION.y - 1 >= 0)
+                {
+                    // Top-Right.
+                    neighborPositions.Add(new Tuple<Node, bool>(_VALUES[node.POSITION.x + 1, node.POSITION.y - 1], true));
+                }
+            }
+
+            // Return resulting array.
             return neighborPositions.ToArray();
         }
 
-        public readonly Node[,] VALUES;
+        // Public const fields.
+        public readonly int WIDTH, HEIGHT;
         public readonly Node STARTING_NODE;
         public readonly Node TARGET_NODE;
-        public readonly int WIDTH, HEIGHT;
+
+        // Private fields.
+        readonly Node[,] _VALUES;
     }
+
     public class Node
     {
+        // Constructors.
         public Node(float traversalCost, Vector2Int position)
         {
             TRAVERSAL_COST = traversalCost;
             POSITION = position;
+            g = float.PositiveInfinity;
         }
 
+        // Public const fields.
         public readonly float TRAVERSAL_COST;
         public readonly Vector2Int POSITION;
 
-        public float h;
-        public float g;
+        // Public fields and properties.
         public float TotalCost
         {
             get
@@ -132,178 +171,190 @@ public class Pathfinder : MonoBehaviour
                 return g + h;
             }
         }
+        public float h;
+        public float g;
         public Node parent;
     }
 
     // Serialized fields.
     [SerializeField] Texture2D input = null;
+    // Display options.
+    [SerializeField] bool drawOpenSet = false;
+    [SerializeField] bool drawClosedSet = false;
+    [SerializeField] bool drawPath = false;
+    [SerializeField] bool drawParents = false;
+    [SerializeField] Vector2 tileSize = Vector2.one;
+    [SerializeField] [Range(0.0f, 1.0f)] float tileTransparency = 0.5f; // Used to reduce transparency of openSet, closedSet and path tiles.
+    // Parameters.
+    [SerializeField] bool ignoreDiagonalCostIncrease = false; // Turn on to weigh diagonal movements identically to cardinal ones.
+    [SerializeField] bool disableStepByStep = false; // Whether or not to display each subsequent step of pathdinding or do the whole calculation at once.
+    [SerializeField] float wallCost = 10000.0f;
+    [SerializeField] float emptyCost = 1.0f;
+    [SerializeField] float slowDownCost = 5.0f;
+    [SerializeField] bool allowDiagonalMovement = true;
+    // Colors.
+    [SerializeField] Color startColor = Color.green;
+    [SerializeField] Color targetColor = Color.red;
+    [SerializeField] Color pathColor = Color.yellow;
+    [SerializeField] Color slowDownColor = Color.cyan;
+    [SerializeField] Color wallColor = Color.black;
+    [SerializeField] Color emptyColor = Color.white;
+    [SerializeField] Color openSetColor = new Color(0.5f, 0.5f, 1.0f, 1.0f);
+    [SerializeField] Color closedSetColor = new Color(0.0f, 0.0f, 0.5f, 1.0f);
+
+    // Const fields.
+    const float ROOT_OF_TWO = 1.41421f; // Used to take into account the increased cost of traveling diagonally.
+
+    // Private fields.
     Map map = null;
-    Vector2Int[] path = new Vector2Int[0];
-    int cycles = 0;
+    int count = 0; // Limit pathfinding function iterations to this number. Increments via "Next" button.
+    Vector2[] path = null;
+    Node[] openSet = null;
+    Node[] closedSet = null;
 
     // Inherited methods.
     private void Start()
     {
         ResetMap();
     }
-    readonly Vector3 SQUARE_SIZE = new Vector3(1f, 1f, 1f);
-    readonly Color WHITE = new Color(1, 1, 1, 1f);
-    readonly Color BLACK = new Color(0, 0, 0, 1f);
-    readonly Color BLUE = new Color(0, 0, 1, 1f);
-    readonly Color RED = new Color(1, 0, 0, 1f);
-    readonly Color GREEN = new Color(0, 1, 0, 1f);
-    readonly Color GRAY = new Color(0.5f, 0.5f, 0.5f, 1f);
-    readonly Color DARK_GRAY = new Color(0.25f, 0.25f, 0.25f, 1f);
-    List<Node> updatedNodes = new List<Node>();
     void OnDrawGizmos()
     {
         if (map != null)
         {
-            /*var color = Color.black;
+            // Draw base map.
+            var tileCost = 0.0f;
             for (int x = 0; x < map.WIDTH; x++)
             {
                 for (int y = 0; y < map.HEIGHT; y++)
                 {
-                    if (updatedNodes.Contains(map.VALUES[x, y]))
+                    tileCost = map[x, y].TRAVERSAL_COST;
+                    if (tileCost == emptyCost) // Empty or special tile.
                     {
-                        color = Color.red;
+                        if (map[x, y] == map.STARTING_NODE) // Starting node.
+                        {
+                            Gizmos.color = startColor;
+                            Gizmos.DrawCube(new Vector3(x, y), tileSize);
+                        }
+                        else if (map[x, y] == map.TARGET_NODE) // Target node.
+                        {
+                            Gizmos.color = targetColor;
+                            Gizmos.DrawCube(new Vector3(x, y), tileSize);
+                        }
+                        else
+                        {
+                            Gizmos.color = emptyColor;
+                            Gizmos.DrawCube(new Vector3(x, y), tileSize);
+                        }
+                    }
+                    else if (tileCost == wallCost) // Wall.
+                    {
+                        Gizmos.color = wallColor;
+                        Gizmos.DrawCube(new Vector3(x, y), tileSize);
+                    }
+                    else if (tileCost == slowDownCost) // SlowDown area.
+                    {
+                        Gizmos.color = slowDownColor;
+                        Gizmos.DrawCube(new Vector3(x, y), tileSize);
                     }
                     else
                     {
-                        color = Color.black;
+                        Debug.LogError("Unknown cost for tile:" + tileCost);
                     }
 
-                    drawString(map.VALUES[x, y].TotalCost.ToString(), new Vector3(x, y, 0), Color.black);
-                    drawString("g: " + map.VALUES[x, y].g.ToString(), new Vector3(x - 0.25f, y + 0.25f, 0), Color.black);
-                    drawString("h: " + map.VALUES[x, y].h.ToString(), new Vector3(x + 0.25f, y + 0.25f, 0), Color.black);
-                }
-            }*/
-
-            for (int x = 0; x < map.WIDTH; x++)
-            {
-                for (int y = 0; y < map.HEIGHT; y++)
-                {
-                    Gizmos.color = map.VALUES[x, y].TRAVERSAL_COST >= WALL_COST ? BLACK : WHITE;
-                    Gizmos.DrawCube(new Vector3(x,y,0), SQUARE_SIZE);
-                }
-            }
-
-            /*Gizmos.color = GRAY;
-            foreach (var tile in openSet)
-            {
-                Gizmos.DrawCube((Vector2)tile.POSITION, SQUARE_SIZE);
-            }
-            Gizmos.color = DARK_GRAY;
-            foreach (var tile in closedSet)
-            {
-                Gizmos.DrawCube((Vector2)tile.POSITION, SQUARE_SIZE);
-            }*/
-
-            Gizmos.color = GREEN;
-            if (path != null)
-            {
-                foreach (var tile in path)
-                {
-                    Gizmos.DrawCube((Vector2)tile, SQUARE_SIZE);
-                }
-            }
-
-            Gizmos.color = BLUE;
-            Gizmos.DrawCube((Vector2)map.STARTING_NODE.POSITION, SQUARE_SIZE);
-
-            Gizmos.color = RED;
-            Gizmos.DrawCube((Vector2)map.TARGET_NODE.POSITION, SQUARE_SIZE);
-
-            /*Gizmos.color = GREEN;
-            for (int x = 0; x < map.WIDTH; x++)
-            {
-                for (int y = 0; y < map.HEIGHT; y++)
-                {
-                    if (map.VALUES[x, y].parent != null)
+                    // Draw parents of nodes.
+                    if (drawParents)
                     {
-                        Gizmos.DrawLine((Vector2)map.VALUES[x, y].POSITION, (Vector2)map.VALUES[x, y].parent.POSITION);
+                        if (map[x, y].parent != null)
+                        {
+                            Gizmos.color = pathColor * tileTransparency;
+                            Gizmos.DrawLine((Vector2)map[x, y].POSITION, (Vector2)map[x, y].parent.POSITION);
+                        }
                     }
                 }
-            }*/
+            }
+
+            // Pathfinding tiles.
+            if (drawClosedSet && closedSet != null)
+            {
+                Gizmos.color = closedSetColor * tileTransparency;
+                foreach (var item in closedSet)
+                {
+                    Gizmos.DrawCube((Vector2)item.POSITION, tileSize);
+                }
+            }
+            if (drawOpenSet && openSet != null)
+            {
+                Gizmos.color = openSetColor * tileTransparency;
+                foreach (var item in openSet)
+                {
+                    Gizmos.DrawCube((Vector2)item.POSITION, tileSize);
+                }
+            }
+            if (drawPath && path != null)
+            {
+                Gizmos.color = pathColor * tileTransparency;
+                foreach (var item in path)
+                {
+                    Gizmos.DrawCube(item, tileSize);
+                }
+            }
         }
     }
     private void OnGUI()
     {
-        if (GUILayout.Button("NextStep"))
+        GUILayout.Label("Iteration: " + count);
+        if (GUILayout.Button("Next"))
         {
-            path = AStar(cycles++, true);
+            RunPathfinding();
         }
         if (GUILayout.Button("Reset"))
         {
             ResetMap();
         }
     }
-    void ResetMap()
+    private void Update()
     {
-        openSet.Clear();
-        closedSet.Clear();
-        path = new Vector2Int[0];
-        map = new Map(input);
-        cycles = 0;
-        updatedNodes.Clear();
-
-        map.STARTING_NODE.g = map.STARTING_NODE.TRAVERSAL_COST;
-        openSet.Add(map.STARTING_NODE);
+        if (Input.GetKey(KeyCode.RightArrow))
+        {
+            RunPathfinding();
+        }
     }
 
-    // A* methods.
-    List<Node> openSet = new List<Node>();
-    List<Node> closedSet = new List<Node>();
-    Vector2Int[] AStar(int cycles, bool disableStepByStep)
+    // Private methods.
+    void RunPathfinding()
     {
-        updatedNodes.Clear();
+        // Calculate path.
+        Tuple<Node[], Node[], Node> returnValue = AStar(++count, disableStepByStep);
 
-        Node current = map.STARTING_NODE;
-        current.g = 0;
-        openSet.Add(current);
-
-        while (openSet.Count > 0 && (disableStepByStep || cycles-- >= 0))
+        // Separate KeyValuePair into two lists for drawing if needed.
+        if (drawOpenSet)
         {
-            openSet.Sort((x,y) => x.TotalCost.CompareTo(y.TotalCost));
-            current = openSet[0];
-
-            if (current == map.TARGET_NODE)
-            {
-                return FindPath(current);
-            }
-
-            openSet.Remove(current);
-
-            foreach (var child in map.GetNeighborsOf(current))
-            {
-                var newCost = current.g + child.Key.TRAVERSAL_COST * (child.Value ? 1.41421f : 1);
-                if (openSet.Contains(child.Key))
-                {
-                    if (child.Key.g <= newCost) continue;
-                }
-                else if (closedSet.Contains(child.Key))
-                {
-                    if (child.Key.g <= newCost) continue;
-                }
-                else
-                {
-                    openSet.Add(child.Key);
-                }
-
-                child.Key.g = newCost;
-                child.Key.parent = current;
-            }
-
-            closedSet.Add(current);
+            openSet = returnValue.Item1;
+        }
+        if (drawClosedSet)
+        {
+            closedSet = returnValue.Item2;
         }
 
-        return FindPath(current);
+        // Rewind path from last current node.
+        path = RewindFromNode(returnValue.Item3);
     }
-    Vector2Int[] FindPath(Node currentNode)
+    void ResetMap()
+    {
+        openSet = null;
+        closedSet = null;
+        path = null;
+        count = 0;
+        map = new Map(input, emptyCost, wallCost, slowDownCost, emptyColor, wallColor, slowDownColor, startColor, targetColor);
+    }
+    /// <summary>
+    /// Used to retreive the path found via pathfinding using Node's parents fields.
+    /// </summary>
+    Vector2[] RewindFromNode(Node currentNode)
     {
         if (currentNode != null)
         {
-            List<Vector2Int> path = new List<Vector2Int>();
+            List<Vector2> path = new List<Vector2>();
 
             while (currentNode.parent != null)
             {
@@ -311,13 +362,79 @@ public class Pathfinder : MonoBehaviour
                 currentNode = currentNode.parent;
             }
 
-            path.Reverse();
             return path.ToArray();
         }
         else
         {
+            Debug.LogError("Node provided to RewindFromNode is null!");
             return null;
         }
+    }
+
+    // Pathfinding methods.
+    /// <summary>
+    /// Returns a tuple composed of the openSet, closedSet and the last current node in the iteration of the algorithm.
+    /// </summary>
+    /// <param name="cycles">Limit on the number of iterations the algorithm is allowed to go through before returning.</param>
+    /// <param name="disableStepByStep">Whether or not to limit the algorithm on the number of iterations it may make.</param>
+    /// <returns>Tuple composed of openSet, closedSet and last current node in the iteration of the algorithm.</returns>
+    Tuple<Node[], Node[], Node> AStar(int cycles, bool disableStepByStep)
+    {
+        // Init sets.
+        List<Node> openSet = new List<Node>();
+        List<Node> closedSet = new List<Node>();
+
+        // Add starting node to set and initialize it.
+        Node current = map.STARTING_NODE;
+        current.g = 0;
+        openSet.Add(current);
+
+        // Start the iterative loop.
+        while (openSet.Count > 0 && (disableStepByStep || cycles-- > 0))
+        {
+            // Move the currently lowest costing node from the openList to the current node.
+            current = openSet[0];
+            openSet.Remove(current);
+
+            // Early exit if a path is found.
+            if (current == map.TARGET_NODE) goto RETURN_RESULT;
+
+            // Expand current node.
+            var newCost = 0.0f;
+            foreach (var child in map.GetNeighborsOf(current, allowDiagonalMovement))
+            {
+                if (!closedSet.Contains(child.Item1))
+                {
+                    // Calculate the new cost for traveling to this neighbor.
+                    if (ignoreDiagonalCostIncrease)
+                    {
+                        newCost = current.g + child.Item1.TRAVERSAL_COST;
+                    }
+                    else
+                    {
+                        newCost = current.g + child.Item1.TRAVERSAL_COST * (child.Item2 ? ROOT_OF_TWO : 1); // Apply a ROOT_OF_TWO multiplier to traversal cost if moving diagonally.
+                    }
+
+                    if (child.Item1.g >= newCost)
+                    {
+                        child.Item1.g = newCost;
+                        child.Item1.parent = current;
+
+                        if (!openSet.Contains(child.Item1))
+                        {
+                            openSet.Add(child.Item1);
+                        }
+                    }
+                }
+            }
+
+            // Move current node to closedSet and sort the openSet for the next iteration.
+            closedSet.Add(current);
+            openSet.Sort((x, y) => x.TotalCost.CompareTo(y.TotalCost));
+        }
+
+        RETURN_RESULT:
+            return new Tuple<Node[], Node[], Node>(openSet.ToArray(), closedSet.ToArray(), current);
     }
 
     static public void drawString(string text, Vector3 worldPos, Color? colour = null)
