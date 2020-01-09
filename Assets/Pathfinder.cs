@@ -5,6 +5,13 @@ using UnityEngine;
 public class Pathfinder : MonoBehaviour
 {
     // Nested types.
+    enum AlgorithmType
+    {
+        A_STAR,
+        BFS,
+        DFS
+    }
+
     public class Map
     {
         // Overloads.
@@ -21,7 +28,7 @@ public class Pathfinder : MonoBehaviour
         }
 
         // Constructors.
-        public Map(Texture2D input, float emptyCost, float wallCost, float slowDownCost, Color emptyColor, Color wallColor, Color slowDownColor, Color startColor, Color targetColor)
+        public Map(Texture2D input, float emptyCost, float wallCost, float slowDownCost, Color emptyColor, Color wallColor, Color slowDownColor, Color startColor, Color targetColor, float heuristicMultiplier)
         {
             WIDTH = input.width;
             HEIGHT = input.height;
@@ -74,7 +81,7 @@ public class Pathfinder : MonoBehaviour
             {
                 for (int y = 0; y < HEIGHT; y++)
                 {
-                    _VALUES[x, y].h = Vector2Int.Distance(TARGET_NODE.POSITION, _VALUES[x,y].POSITION);
+                    _VALUES[x, y].h = Vector2Int.Distance(TARGET_NODE.POSITION, _VALUES[x,y].POSITION) * heuristicMultiplier;
                 }
             }
         }
@@ -178,6 +185,7 @@ public class Pathfinder : MonoBehaviour
 
     // Serialized fields.
     [SerializeField] Texture2D input = null;
+    [SerializeField] AlgorithmType algorithmType = AlgorithmType.A_STAR;
     // Display options.
     [SerializeField] bool drawOpenSet = false;
     [SerializeField] bool drawClosedSet = false;
@@ -192,6 +200,7 @@ public class Pathfinder : MonoBehaviour
     [SerializeField] float emptyCost = 1.0f;
     [SerializeField] float slowDownCost = 5.0f;
     [SerializeField] bool allowDiagonalMovement = true;
+    [SerializeField] float heuristicMultiplier = 1.0f;
     // Colors.
     [SerializeField] Color startColor = Color.green;
     [SerializeField] Color targetColor = Color.red;
@@ -323,21 +332,66 @@ public class Pathfinder : MonoBehaviour
     // Private methods.
     void RunPathfinding()
     {
-        // Calculate path.
-        Tuple<Node[], Node[], Node> returnValue = AStar(++count, disableStepByStep);
-
-        // Separate KeyValuePair into two lists for drawing if needed.
-        if (drawOpenSet)
+        switch (algorithmType)
         {
-            openSet = returnValue.Item1;
-        }
-        if (drawClosedSet)
-        {
-            closedSet = returnValue.Item2;
-        }
+            case AlgorithmType.A_STAR:
+                {
+                    // Calculate path.
+                    Tuple<Node[], Node[], Node> returnValue = AStar(++count, disableStepByStep);
 
-        // Rewind path from last current node.
-        path = RewindFromNode(returnValue.Item3);
+                    // Separate KeyValuePair into two lists for drawing if needed.
+                    if (drawOpenSet)
+                    {
+                        openSet = returnValue.Item1;
+                    }
+                    if (drawClosedSet)
+                    {
+                        closedSet = returnValue.Item2;
+                    }
+
+                    // Rewind path from last current node.
+                    path = RewindFromNode(returnValue.Item3);
+                }
+                break;
+            case AlgorithmType.BFS:
+                {
+                    // Calculate path.
+                    Tuple<Node[], Node[], Node> returnValue = BFS(++count, disableStepByStep);
+
+                    // Separate KeyValuePair into two lists for drawing if needed.
+                    if (drawOpenSet)
+                    {
+                        openSet = returnValue.Item1;
+                    }
+                    if (drawClosedSet)
+                    {
+                        closedSet = returnValue.Item2;
+                    }
+
+                    // Rewind path from last current node.
+                    path = RewindFromNode(returnValue.Item3);
+                }
+                break;
+            case AlgorithmType.DFS:
+                {
+                    // Calculate path.
+                    Tuple<Node[], Node[], Node> returnValue = DFS(++count, disableStepByStep);
+
+                    // Separate KeyValuePair into two lists for drawing if needed.
+                    if (drawOpenSet)
+                    {
+                        openSet = returnValue.Item1;
+                    }
+                    if (drawClosedSet)
+                    {
+                        closedSet = returnValue.Item2;
+                    }
+
+                    // Rewind path from last current node.
+                    path = RewindFromNode(returnValue.Item3);
+                }
+                break;
+        }
     }
     void ResetMap()
     {
@@ -345,7 +399,7 @@ public class Pathfinder : MonoBehaviour
         closedSet = null;
         path = null;
         count = 0;
-        map = new Map(input, emptyCost, wallCost, slowDownCost, emptyColor, wallColor, slowDownColor, startColor, targetColor);
+        map = new Map(input, emptyCost, wallCost, slowDownCost, emptyColor, wallColor, slowDownColor, startColor, targetColor, heuristicMultiplier);
     }
     /// <summary>
     /// Used to retreive the path found via pathfinding using Node's parents fields.
@@ -437,6 +491,110 @@ public class Pathfinder : MonoBehaviour
             return new Tuple<Node[], Node[], Node>(openSet.ToArray(), closedSet.ToArray(), current);
     }
 
+    Tuple<Node[], Node[], Node> BFS(int cycles, bool disableStepByStep)
+    {
+        // Init sets.
+        List<Node> openSet = new List<Node>();
+        List<Node> closedSet = new List<Node>();
+
+        // Add starting node to open set.
+        Node current = map.STARTING_NODE;
+        openSet.Add(current);
+
+        // Add walls to closed set.
+        for (int x = 0; x < map.WIDTH; x++)
+        {
+            for (int y = 0; y < map.HEIGHT; y++)
+            {
+                if (map[x,y].TRAVERSAL_COST == wallCost)
+                {
+                    closedSet.Add(map[x,y]);
+                }
+            }
+        }
+
+        // Start the iterative loop.
+        while (openSet.Count > 0 && (disableStepByStep || cycles-- > 0))
+        {
+            // Process new node.
+            current = openSet[0];
+            openSet.Remove(current);
+
+            // Return if a path is found.
+            if (current == map.TARGET_NODE) goto RETURN_RESULT;
+
+            // Add node to closed set.
+            if (!closedSet.Contains(current))
+            {
+                closedSet.Add(current);
+
+                // Expand node.
+                foreach (var child in map.GetNeighborsOf(current, allowDiagonalMovement))
+                {
+                    if (!closedSet.Contains(child.Item1))
+                    {
+                        child.Item1.parent = current;
+                        openSet.Add(child.Item1);
+                    }
+                }
+            }
+        }
+
+        RETURN_RESULT:
+            return new Tuple<Node[], Node[], Node>(openSet.ToArray(), closedSet.ToArray(), current);
+    }
+
+    Tuple<Node[], Node[], Node> DFS(int cycles, bool disableStepByStep)
+    {
+        // Init sets.
+        Stack<Node> stack = new Stack<Node>();
+        List<Node> closedSet = new List<Node>();
+
+        // Add starting node to sets.
+        stack.Push(map.STARTING_NODE);
+
+        // Add walls to closed set.
+        for (int x = 0; x < map.WIDTH; x++)
+        {
+            for (int y = 0; y < map.HEIGHT; y++)
+            {
+                if (map[x,y].TRAVERSAL_COST == wallCost)
+                {
+                    closedSet.Add(map[x,y]);
+                }
+            }
+        }
+
+        // Start iterative loop.
+        Node current = null;
+        while (stack.Count > 0 && (disableStepByStep || cycles-- > 0))
+        {
+            // Return if a path is found.
+            current = stack.Pop();
+            if (current == map.TARGET_NODE) goto RETURN_RESULT;
+
+            // Add current node to closedSet.
+            if (!closedSet.Contains(current))
+            {
+                closedSet.Add(current);
+
+                // Expand node.
+                foreach (var child in map.GetNeighborsOf(current, allowDiagonalMovement))
+                {
+                    if (!closedSet.Contains(child.Item1))
+                    {
+                        child.Item1.parent = current;
+                        stack.Push(child.Item1);
+                    }
+                }
+            }
+        }
+
+        RETURN_RESULT:
+            return new Tuple<Node[], Node[], Node>(stack.ToArray(), closedSet.ToArray(), current);
+    }
+
+    // Can draw text on editor viewport. Laggy though.
     static public void drawString(string text, Vector3 worldPos, Color? colour = null)
     {
         UnityEditor.Handles.BeginGUI();
