@@ -162,7 +162,7 @@ MonoBehaviour:
   wallCost: 10000
   emptyCost: 1
   slowDownCost: 5
-  allowDiagonalMovement: 0
+  allowDiagonalMovement: 1
   heuristicMultiplier: 1
   startColor: {r: 0, g: 0, b: 1, a: 1}
   targetColor: {r: 1, g: 0, b: 0, a: 1}

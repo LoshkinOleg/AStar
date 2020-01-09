@@ -1,0 +1,28 @@
+Adding new map:
+----------------------
+Place the PNG into Assets folder and set the asset's fields:
+	- Read/Write Enabled: true
+	- Filter Mode: Point (no filter)
+	- Format: RGBA 32 bit
+
+Then slide the asset into the "Input" field on the Pathfinder's game object.
+
+Colors:
+--------
+Use the color sliders in the Pathfinder's inspector to set the meaning of the colors on the input image (ex: 0,0,0,1 is empty tile, 1,0,0,1 is target tile, etc.)
+If an unexpected color is read from the image, an error will be displayed.
+
+Parameters:
+-----------
+	- Draw Open Set / Closed Set / Path / Parents: whether or not to overlay colored tiles corresponding to those elements.
+	- Tile Size: if you need to adjust the gizmo's cube tile size.
+	- Ignore diagonal cost increase: A* only. Whether or not to take into account that moving diagonally is harder than cardinally.
+	- Disable Step by Step: calculate whole path in one go.
+	- Wall Cost: A* only. Increase the value to prevent the algorithm from going full Kool Aid Man on you.
+	- Slow Down Cost: A* only. Defines cost of traversal of slow down tiles.
+	- Allow Diagonal Movement: Whether or not the algorithm should be allowed to move diagonally.
+	- Heuristic Multiplier: use to increase / decrease weight of the heuristic's cost. Creates sub optimal paths though.
+
+Note on drawString() method:
+----------------------------
+This method can be used to draw text on the viewport (like g and h costs). It gets laggy with large maps though.
